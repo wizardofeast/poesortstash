@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading;
 using WindowsInput;
 using WindowsInput.Native;
@@ -12,7 +13,8 @@ namespace PoE.SortStash
 
         private const int MOVEDELAY = 70;
         private const int BUTTONDELAY = 70;
-        private const int KEYDELAY = 50;
+        private const int KEYDELAY = 120;
+        
 
 
 
@@ -21,27 +23,44 @@ namespace PoE.SortStash
             {3440,(new SlotConfig(12,12,219,22,65,5),new SlotConfig(5,12,787,2579,65,5))}
         };
 
-        public readonly IntPtr WindowHandle;
-        public readonly int Left;
-        public readonly int Top;
-        public readonly int Width;
-        public readonly int Height;
 
+        private readonly InputSimulator simulator;
+        private readonly IntPtr WindowHandle;
+        private readonly int Left;
+        private readonly int Top;
+        private readonly int Width;
+        private readonly int Height;
 
 
         public readonly SlotContainer Stash;
         public readonly SlotContainer Inventory;
 
-        public Screen(IntPtr windowHandle,int top,int left,int width,int height)
+
+        public Screen(string processName)
         {
-            WindowHandle = windowHandle;
-            Top = top;
-            Left = left;
-            Width = width;
-            Height = height;
-            Stash = new SlotContainer(Configurations[Width].Stash);
-            Inventory = new SlotContainer(Configurations[Width].Inventory);
+            var processes = Process.GetProcessesByName(processName);
+
+            if (processes.Length == 0)
+                throw new ArgumentOutOfRangeException($"Can not find process named {processName}");
+
+            WindowHandle = processes[0].MainWindowHandle;
+
+            if (Utils.GetWindowRect(WindowHandle, out Utils.Rectangle wsize))
+            {
+                Top = wsize.Top;
+                Left = wsize.Left;
+                Width = wsize.Right - wsize.Left;
+                Height = wsize.Bottom - wsize.Top;
+                Stash = new SlotContainer(Configurations[Width].Stash);
+                Inventory = new SlotContainer(Configurations[Width].Inventory);
+                simulator = new InputSimulator();
+            }
+            else
+            {
+                throw new InvalidOperationException("Can not get window size of the process {processNam}");
+            }      
         }
+        
 
         private Point<double> GetSlotPosition(SlotContainer container,int index)
         {
@@ -51,7 +70,7 @@ namespace PoE.SortStash
             return new Point<double>(x, y);
         }
 
-        private void CollectItems(SlotContainer container, InputSimulator simulator, int delay)
+        private void CollectItems(SlotContainer container)
         {
            
             for (int i = 0; i < container.Slots.Length; i++)
@@ -61,9 +80,9 @@ namespace PoE.SortStash
                 if (Utils.TryEmptyClipboard())
                 {                    
                     simulator.Mouse.MoveMouseTo(position.X, position.Y);
-                    Thread.Sleep(20);
+                    Thread.Sleep(MOVEDELAY);
                     simulator.Keyboard.ModifiedKeyStroke(VirtualKeyCode.CONTROL, VirtualKeyCode.VK_C);
-                    Thread.Sleep(delay);
+                    Thread.Sleep(KEYDELAY);
                     if (Utils.TryReadClipBoardText(out string clipboard))
                     {
                         if (!string.IsNullOrEmpty(clipboard))
@@ -79,13 +98,12 @@ namespace PoE.SortStash
             }
         }
 
-        public void CollectStashItems(InputSimulator simulator, int delay) => CollectItems(Stash, simulator, delay);
+        public void CollectStashItems() => CollectItems(Stash);
 
-        public void CollectInventoryItems(InputSimulator simulator, int delay) => CollectItems(Inventory, simulator, delay);
+        public void CollectInventoryItems() => CollectItems(Inventory);
 
 
-
-        private void FastMove(Point<double> position,InputSimulator simulator)
+        private void FastMove(Point<double> position)
         {
             simulator.Mouse.MoveMouseTo(position.X, position.Y);         
             Thread.Sleep(MOVEDELAY);
@@ -94,7 +112,7 @@ namespace PoE.SortStash
         }
 
 
-        private void Move(Point<double> from,Point<double> to,InputSimulator simulator)
+        private void Move(Point<double> from,Point<double> to)
         {           
             simulator.Mouse.MoveMouseTo(from.X, from.Y);
             Thread.Sleep(MOVEDELAY);
@@ -107,7 +125,7 @@ namespace PoE.SortStash
         }   
 
 
-        public bool MoveToStash(ItemBase item, int slot, InputSimulator simulator, int delay)
+        public bool MoveToStash(ItemBase item, int slot)
         {
             if (Stash.Slots[slot] != null)
                 return false;
@@ -125,31 +143,31 @@ namespace PoE.SortStash
 
             var from = GetSlotPosition(container, index);
             var to = GetSlotPosition(Stash, slot);
-            Move(from, to, simulator);
+            Move(from, to);
             Stash.Slots[slot] = item;
             container.Slots[index] = null;
             return true;
         }
 
 
-        public void ClearInventory(InputSimulator simulator)
+        public void ClearInventory()
         {
             simulator.Keyboard.KeyDown(VirtualKeyCode.CONTROL);
-            Thread.Sleep(20);
+            Thread.Sleep(KEYDELAY);
             for (int i = 0; i < Inventory.Slots.Length; i++)
             {
                 var position = GetSlotPosition(Inventory, i);
-                FastMove(position, simulator);
+                FastMove(position);
              }
 
             simulator.Keyboard.KeyUp(VirtualKeyCode.CONTROL);
-            Thread.Sleep(20);
+            Thread.Sleep(KEYDELAY);
         }
 
-        public void MoveToInventory(int offset,InputSimulator simulator)
+        public void MoveToInventory(int offset)
         {
             simulator.Keyboard.KeyDown(VirtualKeyCode.CONTROL);
-            Thread.Sleep(20);
+            Thread.Sleep(KEYDELAY);
 
             for (int i = 0; i < Inventory.Slots.Length; i++)
             {
@@ -163,14 +181,25 @@ namespace PoE.SortStash
                     break;
 
                 var position = GetSlotPosition(Stash, offset+i);
-                FastMove(position, simulator);
+                FastMove(position);
                 Inventory.Slots[invIndex] = Stash.Slots[index];
                 Stash.Slots[index] = null;
                 Thread.Sleep(20);
             }
 
             simulator.Keyboard.KeyUp(VirtualKeyCode.CONTROL);
-            Thread.Sleep(20);
+            Thread.Sleep(KEYDELAY);
+
+        }
+
+
+        public void Focus()
+        {
+            Utils.SetForegroundWindow(WindowHandle);
+            simulator.Mouse.MoveMouseTo(100, 100);
+            Thread.Sleep(MOVEDELAY);
+            simulator.Mouse.LeftButtonClick();
+            Thread.Sleep(BUTTONDELAY);           
 
         }
 

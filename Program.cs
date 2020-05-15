@@ -9,28 +9,29 @@ namespace PoE.SortStash
        
         static void Main(string[] args)
         {
-            var pname = "PathOfExile_x64Steam";
+            var screen = new Screen("PathOfExile_x64Steam");
 
-            var screen = Utils.GetScreen(pname);
+            screen.Focus();         
 
-            var simulator = new InputSimulator();
-            simulator.Mouse.MoveMouseTo(100,100);
-            simulator.Mouse.LeftButtonClick();
-
-            screen.ClearInventory(simulator);
-
-            screen.CollectStashItems(simulator, 150);
+            screen.CollectStashItems();
          
             var sorted = screen.Stash.Slots.Where(i => i != null).ToArray();
 
             Array.Sort<ItemBase>(sorted);
 
-            screen.MoveToInventory(0, simulator);
+            var invSize = screen.Inventory.Slots.Length;
 
-            for (int i = 0; i < screen.Inventory.Slots.Length; i++)
+            for (int i = 0; i < sorted.Length; i++)
             {
-                screen.MoveToStash(sorted[i], i, simulator, 100);                
-            }
+                if (i % invSize == 0)
+                {
+                    screen.ClearInventory();
+                    screen.MoveToInventory(i);
+                }
+
+                screen.MoveToStash(sorted[i], i);
+            }          
+
         }  
 
     }

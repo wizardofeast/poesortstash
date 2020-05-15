@@ -123,7 +123,7 @@ namespace PoE.SortStash
 
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct Rectangle
+        public struct Rectangle
         {
             public int Left;        // x position of upper-left corner
             public int Top;         // y position of upper-left corner
@@ -133,26 +133,11 @@ namespace PoE.SortStash
 
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool GetWindowRect(IntPtr hwnd, out Rectangle lpRect);
+        public static extern bool GetWindowRect(IntPtr hwnd, out Rectangle lpRect);
 
         [DllImport("user32.dll", SetLastError = true)]
-        private static extern int SetForegroundWindow(IntPtr hwnd);
-
-
-        public static Screen GetScreen(string processName)
-        {
-            var processes = Process.GetProcessesByName(processName);
-            var whnd = processes[0].MainWindowHandle;
-
-            if (GetWindowRect(whnd, out Rectangle wsize))
-            {
-                SetForegroundWindow(whnd);
-                return new Screen(whnd,wsize.Top, wsize.Left, wsize.Right - wsize.Left, wsize.Bottom - wsize.Top);
-            }
-
-            return null;
-        }
-
+        public static extern int SetForegroundWindow(IntPtr hwnd);
+              
         #endregion
 
         public static int Compare(this string[] @this,string[] other)
